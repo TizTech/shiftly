@@ -58,11 +58,23 @@ export async function toggleSavedJobAction(formData: FormData) {
   const jobId = String(formData.get("jobId") || "");
   if (!jobId) return;
 
-  const existing = await db.savedJob.findFirst({ where: { seekerId: user.id, jobId } });
-  if (existing) {
-    await db.savedJob.delete({ where: { id: existing.id } });
-  } else {
-    await db.savedJob.create({ data: { seekerId: user.id, jobId } });
+  const job = await db.job.findUnique({ where: { id: jobId }, select: { id: true } });
+  if (!job) return;
+
+  try {
+    const existing = await db.savedJob.findUnique({
+      where: { seekerId_jobId: { seekerId: user.id, jobId } },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await db.savedJob.delete({ where: { id: existing.id } });
+    } else {
+      await db.savedJob.create({ data: { seekerId: user.id, jobId } });
+    }
+  } catch (error) {
+    // Avoid crashing the route on concurrent clicks/races.
+    console.error("Failed to toggle saved job", { seekerId: user.id, jobId, error });
   }
 
   revalidatePath("/jobs");

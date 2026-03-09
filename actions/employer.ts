@@ -10,13 +10,17 @@ import { storeUpload } from "@/lib/uploads";
 
 export async function upsertCompanyAction(formData: FormData) {
   const user = await requireRole("EMPLOYER");
+  const websiteInput = String(formData.get("website") || "").trim();
+  const normalizedWebsite =
+    websiteInput && !/^https?:\/\//i.test(websiteInput) ? `https://${websiteInput}` : websiteInput;
+
   const parsed = companySchema.safeParse({
     name: formData.get("name"),
     description: formData.get("description") || undefined,
     industry: formData.get("industry") || undefined,
     location: formData.get("location"),
     contactEmail: formData.get("contactEmail"),
-    website: formData.get("website") || "",
+    website: normalizedWebsite,
     companySize: formData.get("companySize") || undefined,
     hiringPreferences: formData.get("hiringPreferences") || undefined,
   });
@@ -35,20 +39,33 @@ export async function upsertCompanyAction(formData: FormData) {
     logoFileId = upload?.id;
   }
 
-  await db.company.upsert({
-    where: { employerProfileId: profile.id },
-    update: {
-      ...parsed.data,
-      website: parsed.data.website || undefined,
-      logoFileId,
-    },
-    create: {
-      employerProfileId: profile.id,
-      ...parsed.data,
-      website: parsed.data.website || undefined,
-      logoFileId,
-    },
-  });
+  try {
+    const { hiringPreferences, ...companyData } = parsed.data;
+
+    await db.$transaction([
+      db.employerProfile.update({
+        where: { id: profile.id },
+        data: { hiringPreferences: hiringPreferences || undefined },
+      }),
+      db.company.upsert({
+        where: { employerProfileId: profile.id },
+        update: {
+          ...companyData,
+          website: companyData.website || undefined,
+          logoFileId,
+        },
+        create: {
+          employerProfileId: profile.id,
+          ...companyData,
+          website: companyData.website || undefined,
+          logoFileId,
+        },
+      }),
+    ]);
+  } catch (error) {
+    console.error("Failed to save company profile", { employerId: user.id, error });
+    redirect("/employer/company?error=Could not save company profile");
+  }
 
   revalidatePath("/employer/company");
   redirect("/employer/company?success=Company profile saved");
