@@ -17,6 +17,7 @@ const dbBlobKey = "database/shiftly.sqlite";
 let ready = false;
 let loadingPromise: Promise<void> | null = null;
 let savingPromise: Promise<void> | null = null;
+const MAX_BLOB_WRITE_ATTEMPTS = 3;
 
 function isNetlifyRuntimeEnv() {
   return process.env.NETLIFY === "true" || Boolean(process.env.SITE_ID) || Boolean(process.env.URL);
@@ -103,11 +104,27 @@ export async function persistNetlifyDatabase() {
 
   savingPromise = (async () => {
     const bytes = await readFile(runtimeDbPath);
-    await dbStore().set(dbBlobKey, toArrayBuffer(bytes));
+    let lastError: unknown = null;
+
+    for (let attempt = 1; attempt <= MAX_BLOB_WRITE_ATTEMPTS; attempt += 1) {
+      try {
+        await dbStore().set(dbBlobKey, toArrayBuffer(bytes));
+        savingPromise = null;
+        return;
+      } catch (error) {
+        lastError = error;
+        if (attempt < MAX_BLOB_WRITE_ATTEMPTS) {
+          await new Promise((resolve) => setTimeout(resolve, attempt * 75));
+        }
+      }
+    }
+
     savingPromise = null;
+    console.error("Failed to persist Netlify DB blob after retries", lastError);
+    throw lastError;
   })().catch((error) => {
-    console.error("Failed to persist Netlify DB blob", error);
     savingPromise = null;
+    throw error;
   });
 
   await savingPromise;
