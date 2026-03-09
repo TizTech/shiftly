@@ -1,18 +1,7 @@
 import type { Metadata } from "next";
-import { Manrope, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
-
-const manrope = Manrope({
-  subsets: ["latin"],
-  variable: "--font-manrope",
-});
-
-const spaceGrotesk = Space_Grotesk({
-  subsets: ["latin"],
-  variable: "--font-display",
-});
 
 export const metadata: Metadata = {
   title: "Shiftly | Local Student & Part-Time Jobs",
@@ -22,7 +11,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className={`${manrope.variable} ${spaceGrotesk.variable} bg-slate-50 text-slate-900 antialiased`}>
+      <body className="bg-slate-50 text-slate-900 antialiased">
         <div className="relative min-h-screen overflow-x-clip bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.13),transparent_35%),radial-gradient(circle_at_20%_90%,rgba(99,102,241,0.08),transparent_35%)]">
           <Navbar />
           <main>{children}</main>

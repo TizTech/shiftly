@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --font-sans: var(--font-manrope);
-  --font-display: var(--font-display);
+  --font-sans: "Manrope", "Avenir Next", "SF Pro Text", "Segoe UI", sans-serif;
+  --font-display: "Sora", "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
 }
 
 * {

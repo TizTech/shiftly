@@ -5,7 +5,10 @@ import { getStore } from "@netlify/blobs";
 
 const isNetlify = process.env.NETLIFY === "true";
 const runtimeDbPath = "/tmp/shiftly.db";
-const templateDbPath = path.join(process.cwd(), "public", "seed", "shiftly-template.db");
+const templateDbCandidates = [
+  path.join(process.cwd(), "public", "seed", "shiftly-template.db"),
+  path.join(process.cwd(), ".next", "server", "public", "seed", "shiftly-template.db"),
+];
 
 const dbStore = () => getStore({ name: "shiftly-db", consistency: "strong" });
 const fileStore = () => getStore({ name: "shiftly-files", consistency: "strong" });
@@ -26,6 +29,19 @@ export function configureNetlifyDatabaseUrl() {
   }
 }
 
+async function copyTemplateDatabase() {
+  for (const candidate of templateDbCandidates) {
+    if (existsSync(candidate)) {
+      await copyFile(candidate, runtimeDbPath);
+      return;
+    }
+  }
+
+  throw new Error(
+    `Shiftly template DB not found. Checked: ${templateDbCandidates.join(", ")}`,
+  );
+}
+
 export async function ensureNetlifyDatabaseReady() {
   if (!isNetlify || ready) return;
 
@@ -42,7 +58,7 @@ export async function ensureNetlifyDatabaseReady() {
     if (existing) {
       await writeFile(runtimeDbPath, Buffer.from(existing));
     } else {
-      await copyFile(templateDbPath, runtimeDbPath);
+      await copyTemplateDatabase();
       const bytes = await readFile(runtimeDbPath);
       await dbStore().set(dbBlobKey, toArrayBuffer(bytes));
     }
@@ -52,7 +68,7 @@ export async function ensureNetlifyDatabaseReady() {
   })().catch(async (error) => {
     console.error("Failed to initialize Netlify DB blob. Falling back to template.", error);
     if (!existsSync(runtimeDbPath)) {
-      await copyFile(templateDbPath, runtimeDbPath);
+      await copyTemplateDatabase();
     }
     ready = true;
     loadingPromise = null;

@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "12mb",
     },
   },
+  outputFileTracingIncludes: {
+    "/*": ["./public/seed/shiftly-template.db"],
+  },
 };
 
 export default nextConfig;
