@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { BriefcaseBusiness } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { logoutAction } from "@/actions/auth";
 
@@ -10,14 +9,11 @@ export async function Navbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/85 backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-2 text-slate-900">
-          <span className="rounded-xl bg-emerald-500 p-2 text-white shadow-lg shadow-emerald-200">
-            <BriefcaseBusiness className="h-5 w-5" />
+        <Link href="/" className="group flex flex-col leading-none text-slate-900">
+          <span className="font-display text-2xl font-black tracking-tight text-slate-950">
+            Shift<span className="text-emerald-600">ly</span>
           </span>
-          <div>
-            <p className="font-display text-xl font-bold leading-none">Shiftly</p>
-            <p className="text-xs text-slate-500">Local jobs that fit life</p>
-          </div>
+          <span className="mt-1 h-0.5 w-14 rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300 transition-all duration-200 group-hover:w-20" />
         </Link>
 
         <nav className="hidden items-center gap-6 md:flex">
