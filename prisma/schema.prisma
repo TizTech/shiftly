@@ -1,0 +1,246 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SEEKER
+  EMPLOYER
+}
+
+enum JobType {
+  PART_TIME
+  WEEKEND
+  EVENING
+  TEMPORARY
+  FULL_TIME
+  CASUAL
+  SEASONAL
+}
+
+enum WorkMode {
+  ONSITE
+  HYBRID
+  REMOTE
+}
+
+enum JobStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+enum ApplicationStatus {
+  SUBMITTED
+  REVIEWED
+  SHORTLISTED
+  REJECTED
+  HIRED
+}
+
+enum FileType {
+  CV
+  LOGO
+  COVER_LETTER
+  PROFILE_PHOTO
+}
+
+model User {
+  id            String            @id @default(cuid())
+  email         String            @unique
+  passwordHash  String
+  role          UserRole
+  fullName      String
+  rememberToken String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  employerProfile EmployerProfile?
+  seekerProfile   JobSeekerProfile?
+  postedJobs      Job[]              @relation("EmployerJobs")
+  applications    Application[]      @relation("SeekerApplications")
+  savedJobs       SavedJob[]
+  uploadedFiles   UploadedFile[]
+  sentMessages    Message[]          @relation("SentMessages")
+  conversationsAsEmployer Conversation[] @relation("EmployerConversations")
+  conversationsAsSeeker   Conversation[] @relation("SeekerConversations")
+}
+
+model EmployerProfile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  contactEmail      String
+  hiringPreferences String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company  Company?
+}
+
+model JobSeekerProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  phone           String?
+  location        String?
+  bio             String?
+  preferredRoles  String?
+  availability    String?
+  workEligibility String?
+  profilePhotoId  String?
+  cvFileId        String?
+  coverFileId     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profilePhoto UploadedFile? @relation("SeekerProfilePhoto", fields: [profilePhotoId], references: [id])
+  cvFile       UploadedFile? @relation("SeekerCv", fields: [cvFileId], references: [id])
+  coverFile    UploadedFile? @relation("SeekerCover", fields: [coverFileId], references: [id])
+}
+
+model Company {
+  id                String   @id @default(cuid())
+  employerProfileId String   @unique
+  name              String
+  description       String?
+  industry          String?
+  location          String
+  contactEmail      String
+  website           String?
+  companySize       String?
+  logoFileId        String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  employerProfile EmployerProfile @relation(fields: [employerProfileId], references: [id], onDelete: Cascade)
+  logoFile        UploadedFile?   @relation("CompanyLogo", fields: [logoFileId], references: [id])
+  jobs            Job[]
+}
+
+model Job {
+  id                  String   @id @default(cuid())
+  employerId          String
+  companyId           String
+  title               String
+  location            String
+  category            String
+  jobType             JobType
+  workMode            WorkMode @default(ONSITE)
+  salary              String
+  shiftInfo           String?
+  description         String
+  responsibilities    String
+  requirements        String
+  benefits            String?
+  vacancies           Int      @default(1)
+  studentFriendly     Boolean  @default(true)
+  immediateStart      Boolean  @default(false)
+  urgentHiring        Boolean  @default(false)
+  applicationDeadline DateTime?
+  status              JobStatus @default(PUBLISHED)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  employer     User          @relation("EmployerJobs", fields: [employerId], references: [id], onDelete: Cascade)
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  applications Application[]
+  savedBy      SavedJob[]
+  conversation Conversation[]
+
+  @@index([title])
+  @@index([location])
+  @@index([category])
+  @@index([createdAt])
+}
+
+model Application {
+  id              String            @id @default(cuid())
+  jobId           String
+  seekerId        String
+  cvFileId        String
+  coverLetterId   String?
+  note            String?
+  status          ApplicationStatus @default(SUBMITTED)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  job           Job          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  seeker        User         @relation("SeekerApplications", fields: [seekerId], references: [id], onDelete: Cascade)
+  cvFile        UploadedFile @relation("ApplicationCv", fields: [cvFileId], references: [id])
+  coverLetter   UploadedFile? @relation("ApplicationCover", fields: [coverLetterId], references: [id])
+  conversation  Conversation?
+
+  @@unique([jobId, seekerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Conversation {
+  id             String   @id @default(cuid())
+  applicationId  String   @unique
+  jobId          String
+  employerId     String
+  seekerId       String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  job         Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  employer    User        @relation("EmployerConversations", fields: [employerId], references: [id], onDelete: Cascade)
+  seeker      User        @relation("SeekerConversations", fields: [seekerId], references: [id], onDelete: Cascade)
+  messages    Message[]
+}
+
+model Message {
+  id             String    @id @default(cuid())
+  conversationId String
+  senderId       String
+  body           String
+  readAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+}
+
+model SavedJob {
+  id        String   @id @default(cuid())
+  seekerId  String
+  jobId     String
+  createdAt DateTime @default(now())
+
+  seeker User @relation(fields: [seekerId], references: [id], onDelete: Cascade)
+  job    Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([seekerId, jobId])
+}
+
+model UploadedFile {
+  id           String   @id @default(cuid())
+  ownerId      String
+  type         FileType
+  originalName String
+  storedName   String
+  mimeType     String
+  size         Int
+  path         String
+  createdAt    DateTime @default(now())
+
+  owner                User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  companyLogoFor       Company[]          @relation("CompanyLogo")
+  seekerProfilePhotos  JobSeekerProfile[] @relation("SeekerProfilePhoto")
+  seekerCvFiles        JobSeekerProfile[] @relation("SeekerCv")
+  seekerCoverFiles     JobSeekerProfile[] @relation("SeekerCover")
+  applicationsCv       Application[]      @relation("ApplicationCv")
+  applicationsCover    Application[]      @relation("ApplicationCover")
+
+  @@index([ownerId])
+  @@index([type])
+}
