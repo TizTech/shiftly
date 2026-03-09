@@ -81,12 +81,25 @@ export async function ensureNetlifyDatabaseReady() {
     ready = true;
     loadingPromise = null;
   })().catch(async (error) => {
-    console.error("Failed to initialize Netlify DB blob. Falling back to template.", error);
-    if (!existsSync(runtimeDbPath)) {
-      await copyTemplateDatabase();
-    }
-    ready = true;
     loadingPromise = null;
+
+    const isMissingBlobsEnvironmentError =
+      error instanceof Error && error.name === "MissingBlobsEnvironmentError";
+
+    // During local/CI builds, Blobs is unavailable. Allow template fallback there.
+    if (isMissingBlobsEnvironmentError && process.env.NODE_ENV !== "production") {
+      console.error("Failed to initialize Netlify DB blob in non-production. Falling back to template.", error);
+      if (!existsSync(runtimeDbPath)) {
+        await copyTemplateDatabase();
+      }
+      ready = true;
+      return;
+    }
+
+    // In production, fail fast rather than silently diverging from persisted DB state.
+    ready = false;
+    console.error("Failed to initialize Netlify DB blob.", error);
+    throw error;
   });
 
   await loadingPromise;
