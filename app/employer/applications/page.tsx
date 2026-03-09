@@ -13,6 +13,7 @@ export default async function EmployerApplicationsPage() {
       job: true,
       cvFile: true,
       coverLetter: true,
+      conversation: { select: { id: true } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -39,7 +40,12 @@ export default async function EmployerApplicationsPage() {
             <div className="mt-3 flex flex-wrap gap-2 text-sm">
               <a href={application.cvFile.path} target="_blank" className="rounded-lg border border-slate-200 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50">CV: {application.cvFile.originalName}</a>
               {application.coverLetter ? <a href={application.coverLetter.path} target="_blank" className="rounded-lg border border-slate-200 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50">Cover letter</a> : null}
-              <Link href="/employer/messages" className="rounded-lg border border-slate-200 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50">Open chat</Link>
+              <Link
+                href={application.conversation ? `/employer/messages?conversationId=${application.conversation.id}` : "/employer/messages"}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Open chat
+              </Link>
             </div>
 
             <form action={updateApplicationStatusAction} className="mt-3 flex items-center gap-2">

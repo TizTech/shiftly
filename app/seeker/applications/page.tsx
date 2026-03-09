@@ -17,6 +17,7 @@ export default async function SeekerApplicationsPage({
       job: { include: { company: true } },
       cvFile: true,
       coverLetter: true,
+      conversation: { select: { id: true } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -42,7 +43,12 @@ export default async function SeekerApplicationsPage({
               <a href={application.cvFile.path} target="_blank" className="rounded-lg border border-slate-200 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50">CV file</a>
               {application.coverLetter ? <a href={application.coverLetter.path} target="_blank" className="rounded-lg border border-slate-200 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50">Cover letter</a> : null}
               <Link href={`/jobs/${application.job.id}`} className="rounded-lg border border-slate-200 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50">View job</Link>
-              <Link href="/seeker/messages" className="rounded-lg border border-slate-200 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50">Open chat</Link>
+              <Link
+                href={application.conversation ? `/seeker/messages?conversationId=${application.conversation.id}` : "/seeker/messages"}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Open chat
+              </Link>
             </div>
           </div>
         ))
