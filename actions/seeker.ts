@@ -169,15 +169,36 @@ export async function sendSeekerMessageAction(formData: FormData) {
   const conversation = await db.conversation.findUnique({ where: { id: parsed.data.conversationId } });
   if (!conversation || conversation.seekerId !== user.id) return;
 
-  await db.message.create({
-    data: {
-      conversationId: conversation.id,
-      senderId: user.id,
-      body: parsed.data.body,
-    },
+  const body = parsed.data.body.trim();
+  if (!body) return;
+
+  const lastMessage = await db.message.findFirst({
+    where: { conversationId: conversation.id, senderId: user.id },
+    orderBy: { createdAt: "desc" },
+    select: { body: true, createdAt: true },
   });
 
-  await db.conversation.update({ where: { id: conversation.id }, data: { updatedAt: new Date() } });
+  const isRapidDuplicate =
+    !!lastMessage &&
+    lastMessage.body === body &&
+    Date.now() - new Date(lastMessage.createdAt).getTime() < 8_000;
+
+  if (isRapidDuplicate) {
+    redirect(`/seeker/messages?conversationId=${conversation.id}`);
+  }
+
+  await db.$transaction([
+    db.message.create({
+      data: {
+        conversationId: conversation.id,
+        senderId: user.id,
+        body,
+      },
+    }),
+    db.conversation.update({ where: { id: conversation.id }, data: { updatedAt: new Date() } }),
+  ]);
+
   revalidatePath("/seeker/messages");
   revalidatePath("/employer/messages");
+  redirect(`/seeker/messages?conversationId=${conversation.id}`);
 }
