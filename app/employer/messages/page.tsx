@@ -1,6 +1,7 @@
 import { sendEmployerMessageAction } from "@/actions/employer";
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { LiveSync } from "@/components/chat/live-sync";
 
 export default async function EmployerMessagesPage({
   searchParams,
@@ -27,6 +28,7 @@ export default async function EmployerMessagesPage({
 
   return (
     <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
+      <LiveSync />
       <section className="rounded-2xl border border-slate-200 bg-white p-3">
         <h1 className="px-2 pb-2 font-display text-xl font-bold text-slate-900">Messages</h1>
         <div className="space-y-2">
