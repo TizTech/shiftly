@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
-import { isNetlifyRuntime, storeFileInNetlifyBlob } from "@/lib/netlify-persistence";
+import { isBlobRuntime, storeFileInBlob } from "@/lib/netlify-persistence";
 
 const folderMap: Record<FileType, string> = {
   CV: "cv",
@@ -22,8 +22,8 @@ export async function storeUpload(file: File, ownerId: string, type: FileType) {
   const uploadDir = path.join(process.cwd(), "public", "uploads", folder);
   const arrayBuffer = await file.arrayBuffer();
 
-  if (isNetlifyRuntime()) {
-    await storeFileInNetlifyBlob(`${folder}/${storedName}`, arrayBuffer);
+  if (isBlobRuntime()) {
+    await storeFileInBlob(`${folder}/${storedName}`, arrayBuffer);
   } else {
     await mkdir(uploadDir, { recursive: true });
     const filePath = path.join(uploadDir, storedName);
@@ -39,7 +39,7 @@ export async function storeUpload(file: File, ownerId: string, type: FileType) {
       storedName,
       mimeType: file.type || "application/octet-stream",
       size: file.size,
-      path: isNetlifyRuntime() ? `/api/uploads/${folder}/${storedName}` : relativePath,
+      path: isBlobRuntime() ? `/api/uploads/${folder}/${storedName}` : relativePath,
     },
   });
 }

@@ -6,6 +6,11 @@ import { Footer } from "@/components/layout/footer";
 export const metadata: Metadata = {
   title: "Shiftly | Local Student & Part-Time Jobs",
   description: "Find local part-time, student and entry-level jobs near you. Fast applications, local employers, real opportunities.",
+  icons: {
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

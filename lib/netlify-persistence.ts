@@ -2,15 +2,13 @@ import { chmod, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { getStore } from "@netlify/blobs";
+import { get as getVercelBlob, put as putVercelBlob } from "@vercel/blob";
 
 const runtimeDbPath = "/tmp/shiftly.db";
 const templateDbCandidates = [
   path.join(process.cwd(), "public", "seed", "shiftly-template.db"),
   path.join(process.cwd(), ".next", "server", "public", "seed", "shiftly-template.db"),
 ];
-
-const dbStore = () => getStore({ name: "shiftly-db", consistency: "strong" });
-const fileStore = () => getStore({ name: "shiftly-files", consistency: "strong" });
 
 const dbBlobKey = "database/shiftly.sqlite";
 
@@ -21,16 +19,110 @@ const MAX_BLOB_WRITE_ATTEMPTS = 3;
 const BLOB_REFRESH_INTERVAL_MS = 1500;
 let lastBlobSyncAt = 0;
 
+function netlifyDbStore() {
+  return getStore({ name: "shiftly-db", consistency: "strong" });
+}
+
+function netlifyFileStore() {
+  return getStore({ name: "shiftly-files", consistency: "strong" });
+}
+
 function isNetlifyRuntimeEnv() {
   return process.env.NETLIFY === "true" || Boolean(process.env.SITE_ID) || Boolean(process.env.URL);
+}
+
+function isVercelRuntimeEnv() {
+  return process.env.VERCEL === "1" || process.env.VERCEL === "true" || Boolean(process.env.VERCEL_ENV);
+}
+
+function runtimeBlobProvider(): "netlify" | "vercel" | null {
+  if (isNetlifyRuntimeEnv()) return "netlify";
+  if (isVercelRuntimeEnv()) return "vercel";
+  return null;
+}
+
+function isBlobRuntimeEnv() {
+  return runtimeBlobProvider() !== null;
 }
 
 function toArrayBuffer(buffer: Buffer): ArrayBuffer {
   return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
 }
 
-export function configureNetlifyDatabaseUrl() {
-  if (!isNetlifyRuntimeEnv()) return;
+function isMissingBlobConfigurationError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+
+  return (
+    error.name === "MissingBlobsEnvironmentError" ||
+    error.name === "BlobStoreNotFoundError" ||
+    /BLOB_READ_WRITE_TOKEN/i.test(error.message) ||
+    /No token found/i.test(error.message)
+  );
+}
+
+async function readDatabaseBlob(): Promise<ArrayBuffer | null> {
+  const provider = runtimeBlobProvider();
+  if (!provider) return null;
+
+  if (provider === "netlify") {
+    return netlifyDbStore().get(dbBlobKey, { type: "arrayBuffer", consistency: "strong" });
+  }
+
+  const response = await getVercelBlob(dbBlobKey, { access: "private" });
+  if (!response || response.statusCode !== 200 || !response.stream) return null;
+  return new Response(response.stream).arrayBuffer();
+}
+
+async function writeDatabaseBlob(bytes: Buffer) {
+  const provider = runtimeBlobProvider();
+  if (!provider) return;
+
+  if (provider === "netlify") {
+    await netlifyDbStore().set(dbBlobKey, toArrayBuffer(bytes));
+    return;
+  }
+
+  await putVercelBlob(dbBlobKey, bytes, {
+    access: "private",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    cacheControlMaxAge: 0,
+    contentType: "application/octet-stream",
+  });
+}
+
+async function readFileBlob(key: string): Promise<ArrayBuffer | null> {
+  const provider = runtimeBlobProvider();
+  if (!provider) return null;
+
+  if (provider === "netlify") {
+    return netlifyFileStore().get(key, { type: "arrayBuffer", consistency: "strong" });
+  }
+
+  const response = await getVercelBlob(key, { access: "private" });
+  if (!response || response.statusCode !== 200 || !response.stream) return null;
+  return new Response(response.stream).arrayBuffer();
+}
+
+async function writeFileBlob(key: string, data: ArrayBuffer) {
+  const provider = runtimeBlobProvider();
+  if (!provider) return;
+
+  if (provider === "netlify") {
+    await netlifyFileStore().set(key, data);
+    return;
+  }
+
+  await putVercelBlob(key, Buffer.from(data), {
+    access: "private",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: "application/octet-stream",
+  });
+}
+
+export function configureBlobBackedDatabaseUrl() {
+  if (!isBlobRuntimeEnv()) return;
 
   const dbUrl = process.env.DATABASE_URL;
   const shouldForceRuntimeSqlite =
@@ -45,8 +137,9 @@ export function configureNetlifyDatabaseUrl() {
 }
 
 async function refreshRuntimeDatabaseFromBlob() {
-  const existing = await dbStore().get(dbBlobKey, { type: "arrayBuffer", consistency: "strong" });
+  const existing = await readDatabaseBlob();
   if (!existing) return;
+
   await writeFile(runtimeDbPath, Buffer.from(existing));
   await chmod(runtimeDbPath, 0o600);
   lastBlobSyncAt = Date.now();
@@ -61,13 +154,11 @@ async function copyTemplateDatabase() {
     }
   }
 
-  throw new Error(
-    `Shiftly template DB not found. Checked: ${templateDbCandidates.join(", ")}`,
-  );
+  throw new Error(`Shiftly template DB not found. Checked: ${templateDbCandidates.join(", ")}`);
 }
 
-export async function ensureNetlifyDatabaseReady(options?: { preferLocal?: boolean }) {
-  if (!isNetlifyRuntimeEnv()) return;
+export async function ensureBlobDatabaseReady(options?: { preferLocal?: boolean }) {
+  if (!isBlobRuntimeEnv()) return;
 
   if (ready) {
     if (options?.preferLocal) return;
@@ -99,7 +190,7 @@ export async function ensureNetlifyDatabaseReady(options?: { preferLocal?: boole
   loadingPromise = (async () => {
     await mkdir("/tmp", { recursive: true });
 
-    const existing = await dbStore().get(dbBlobKey, { type: "arrayBuffer", consistency: "strong" });
+    const existing = await readDatabaseBlob();
 
     if (existing) {
       await writeFile(runtimeDbPath, Buffer.from(existing));
@@ -108,7 +199,7 @@ export async function ensureNetlifyDatabaseReady(options?: { preferLocal?: boole
     } else {
       await copyTemplateDatabase();
       const bytes = await readFile(runtimeDbPath);
-      await dbStore().set(dbBlobKey, toArrayBuffer(bytes));
+      await writeDatabaseBlob(bytes);
       lastBlobSyncAt = Date.now();
     }
 
@@ -117,12 +208,8 @@ export async function ensureNetlifyDatabaseReady(options?: { preferLocal?: boole
   })().catch(async (error) => {
     loadingPromise = null;
 
-    const isMissingBlobsEnvironmentError =
-      error instanceof Error && error.name === "MissingBlobsEnvironmentError";
-
-    // During local/CI builds, Blobs is unavailable. Allow template fallback there.
-    if (isMissingBlobsEnvironmentError && process.env.NODE_ENV !== "production") {
-      console.error("Failed to initialize Netlify DB blob in non-production. Falling back to template.", error);
+    if (isMissingBlobConfigurationError(error) && process.env.NODE_ENV !== "production") {
+      console.error("Blob storage unavailable in non-production. Falling back to template DB.", error);
       if (!existsSync(runtimeDbPath)) {
         await copyTemplateDatabase();
       }
@@ -130,19 +217,18 @@ export async function ensureNetlifyDatabaseReady(options?: { preferLocal?: boole
       return;
     }
 
-    // In production, fail fast rather than silently diverging from persisted DB state.
     ready = false;
-    console.error("Failed to initialize Netlify DB blob.", error);
+    console.error("Failed to initialize blob-backed DB.", error);
     throw error;
   });
 
   await loadingPromise;
 }
 
-export async function persistNetlifyDatabase() {
-  if (!isNetlifyRuntimeEnv()) return;
+export async function persistBlobDatabase() {
+  if (!isBlobRuntimeEnv()) return;
 
-  await ensureNetlifyDatabaseReady();
+  await ensureBlobDatabaseReady();
 
   if (savingPromise) {
     await savingPromise;
@@ -155,7 +241,7 @@ export async function persistNetlifyDatabase() {
 
     for (let attempt = 1; attempt <= MAX_BLOB_WRITE_ATTEMPTS; attempt += 1) {
       try {
-        await dbStore().set(dbBlobKey, toArrayBuffer(bytes));
+        await writeDatabaseBlob(bytes);
         lastBlobSyncAt = Date.now();
         savingPromise = null;
         return;
@@ -168,7 +254,7 @@ export async function persistNetlifyDatabase() {
     }
 
     savingPromise = null;
-    console.error("Failed to persist Netlify DB blob after retries", lastError);
+    console.error("Failed to persist DB blob after retries", lastError);
     throw lastError;
   })().catch((error) => {
     savingPromise = null;
@@ -178,14 +264,22 @@ export async function persistNetlifyDatabase() {
   await savingPromise;
 }
 
-export async function storeFileInNetlifyBlob(key: string, data: ArrayBuffer) {
-  await fileStore().set(key, data);
+export async function storeFileInBlob(key: string, data: ArrayBuffer) {
+  await writeFileBlob(key, data);
 }
 
-export async function getFileFromNetlifyBlob(key: string) {
-  return fileStore().get(key, { type: "arrayBuffer", consistency: "strong" });
+export async function getFileFromBlob(key: string) {
+  return readFileBlob(key);
 }
 
-export function isNetlifyRuntime() {
-  return isNetlifyRuntimeEnv();
+export function isBlobRuntime() {
+  return isBlobRuntimeEnv();
 }
+
+// Backward-compatible exports for existing imports.
+export const configureNetlifyDatabaseUrl = configureBlobBackedDatabaseUrl;
+export const ensureNetlifyDatabaseReady = ensureBlobDatabaseReady;
+export const persistNetlifyDatabase = persistBlobDatabase;
+export const storeFileInNetlifyBlob = storeFileInBlob;
+export const getFileFromNetlifyBlob = getFileFromBlob;
+export const isNetlifyRuntime = isNetlifyRuntimeEnv;

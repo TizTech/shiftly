@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client";
-import { configureNetlifyDatabaseUrl, ensureNetlifyDatabaseReady, persistNetlifyDatabase } from "@/lib/netlify-persistence";
+import { configureBlobBackedDatabaseUrl, ensureBlobDatabaseReady, persistBlobDatabase } from "@/lib/netlify-persistence";
 
-configureNetlifyDatabaseUrl();
+configureBlobBackedDatabaseUrl();
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
 
@@ -31,11 +31,11 @@ export const db = baseClient.$extends({
   query: {
     async $allOperations({ operation, args, query }) {
       const isWrite = writeActions.has(operation);
-      await ensureNetlifyDatabaseReady({ preferLocal: isWrite });
+      await ensureBlobDatabaseReady({ preferLocal: isWrite });
       const result = await query(args);
 
       if (isWrite) {
-        await persistNetlifyDatabase();
+        await persistBlobDatabase();
       }
 
       return result;

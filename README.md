@@ -142,11 +142,15 @@ To add external email later:
 
 ## Deployment Notes
 
-- Netlify is supported without any extra third-party signup:
-  - In Netlify env vars, set only `SESSION_SECRET` to a long random string.
-  - Keep `DATABASE_URL` unset on Netlify.
-  - On first production request, Shiftly automatically copies `public/seed/shiftly-template.db` to runtime and persists DB changes to Netlify Blobs.
-  - Uploaded CVs/logos/cover letters are stored in Netlify Blobs and served via `/api/uploads/[...slug]`.
+- Vercel setup (recommended for this repo):
+  - Set `SESSION_SECRET` to a long random string.
+  - Keep `DATABASE_URL` unset (or set to `file:/tmp/shiftly.db`).
+  - Connect a Vercel Blob store and set `BLOB_READ_WRITE_TOKEN`.
+  - On first production request, Shiftly copies `public/seed/shiftly-template.db` to runtime and persists DB updates to Vercel Blob.
+  - Uploaded CVs/logos/cover letters are stored as private blobs and served via `/api/uploads/[...slug]`.
+- Netlify remains supported:
+  - Set `SESSION_SECRET` and keep `DATABASE_URL` unset.
+  - Shiftly persists DB/file data using Netlify Blobs.
 - For higher-scale production later:
   - Move from SQLite blob-sync to managed Postgres.
   - Move file storage to dedicated object storage if needed.

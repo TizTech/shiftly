@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getFileFromNetlifyBlob, isNetlifyRuntime } from "@/lib/netlify-persistence";
+import { getFileFromBlob, isBlobRuntime } from "@/lib/netlify-persistence";
 
 export async function GET(
   _request: Request,
@@ -12,11 +12,11 @@ export async function GET(
     return new NextResponse("Missing upload key", { status: 400 });
   }
 
-  if (!isNetlifyRuntime()) {
+  if (!isBlobRuntime()) {
     return new NextResponse("Not used in local mode", { status: 404 });
   }
 
-  const file = await getFileFromNetlifyBlob(key);
+  const file = await getFileFromBlob(key);
   if (!file) {
     return new NextResponse("File not found", { status: 404 });
   }
