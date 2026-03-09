@@ -18,6 +18,21 @@ type ThreadProps = {
   emptyLabel?: string;
 };
 
+function mergeMessages(current: Message[], incoming: Message[]) {
+  const byId = new Map<string, Message>();
+
+  for (const message of current) {
+    byId.set(message.id, message);
+  }
+  for (const message of incoming) {
+    byId.set(message.id, message);
+  }
+
+  return [...byId.values()].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
+}
+
 export function Thread({
   conversationId,
   currentUserId,
@@ -42,7 +57,7 @@ export function Thread({
       const response = await fetch(apiBase, { cache: "no-store" });
       if (!response.ok) return;
       const data = (await response.json()) as { messages: Message[] };
-      setMessages(data.messages);
+      setMessages((previous) => mergeMessages(previous, data.messages));
     };
 
     const intervalId = window.setInterval(() => {
@@ -100,7 +115,12 @@ export function Thread({
       }
 
       const data = (await response.json()) as { message: Message };
-      setMessages((prev) => prev.map((message) => (message.id === tempId ? data.message : message)));
+      setMessages((prev) =>
+        mergeMessages(
+          prev.map((message) => (message.id === tempId ? data.message : message)),
+          [data.message],
+        ),
+      );
     } finally {
       setSending(false);
     }

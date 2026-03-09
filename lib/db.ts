@@ -30,10 +30,11 @@ const writeActions = new Set([
 export const db = baseClient.$extends({
   query: {
     async $allOperations({ operation, args, query }) {
-      await ensureNetlifyDatabaseReady();
+      const isWrite = writeActions.has(operation);
+      await ensureNetlifyDatabaseReady({ preferLocal: isWrite });
       const result = await query(args);
 
-      if (writeActions.has(operation)) {
+      if (isWrite) {
         await persistNetlifyDatabase();
       }
 

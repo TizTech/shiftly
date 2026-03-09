@@ -18,6 +18,8 @@ let ready = false;
 let loadingPromise: Promise<void> | null = null;
 let savingPromise: Promise<void> | null = null;
 const MAX_BLOB_WRITE_ATTEMPTS = 3;
+const BLOB_REFRESH_INTERVAL_MS = 1500;
+let lastBlobSyncAt = 0;
 
 function isNetlifyRuntimeEnv() {
   return process.env.NETLIFY === "true" || Boolean(process.env.SITE_ID) || Boolean(process.env.URL);
@@ -42,6 +44,14 @@ export function configureNetlifyDatabaseUrl() {
   }
 }
 
+async function refreshRuntimeDatabaseFromBlob() {
+  const existing = await dbStore().get(dbBlobKey, { type: "arrayBuffer", consistency: "strong" });
+  if (!existing) return;
+  await writeFile(runtimeDbPath, Buffer.from(existing));
+  await chmod(runtimeDbPath, 0o600);
+  lastBlobSyncAt = Date.now();
+}
+
 async function copyTemplateDatabase() {
   for (const candidate of templateDbCandidates) {
     if (existsSync(candidate)) {
@@ -56,8 +66,30 @@ async function copyTemplateDatabase() {
   );
 }
 
-export async function ensureNetlifyDatabaseReady() {
-  if (!isNetlifyRuntimeEnv() || ready) return;
+export async function ensureNetlifyDatabaseReady(options?: { preferLocal?: boolean }) {
+  if (!isNetlifyRuntimeEnv()) return;
+
+  if (ready) {
+    if (options?.preferLocal) return;
+    if (savingPromise) return;
+    if (Date.now() - lastBlobSyncAt < BLOB_REFRESH_INTERVAL_MS) return;
+
+    if (loadingPromise) {
+      await loadingPromise;
+      return;
+    }
+
+    loadingPromise = (async () => {
+      await refreshRuntimeDatabaseFromBlob();
+      loadingPromise = null;
+    })().catch((error) => {
+      console.error("Failed to refresh runtime DB from blob", error);
+      loadingPromise = null;
+    });
+
+    await loadingPromise;
+    return;
+  }
 
   if (loadingPromise) {
     await loadingPromise;
@@ -72,10 +104,12 @@ export async function ensureNetlifyDatabaseReady() {
     if (existing) {
       await writeFile(runtimeDbPath, Buffer.from(existing));
       await chmod(runtimeDbPath, 0o600);
+      lastBlobSyncAt = Date.now();
     } else {
       await copyTemplateDatabase();
       const bytes = await readFile(runtimeDbPath);
       await dbStore().set(dbBlobKey, toArrayBuffer(bytes));
+      lastBlobSyncAt = Date.now();
     }
 
     ready = true;
@@ -122,6 +156,7 @@ export async function persistNetlifyDatabase() {
     for (let attempt = 1; attempt <= MAX_BLOB_WRITE_ATTEMPTS; attempt += 1) {
       try {
         await dbStore().set(dbBlobKey, toArrayBuffer(bytes));
+        lastBlobSyncAt = Date.now();
         savingPromise = null;
         return;
       } catch (error) {
