@@ -142,8 +142,13 @@ To add external email later:
 
 ## Deployment Notes
 
-- Move from SQLite to Postgres for multi-user production.
-- Use object storage (S3/R2) for uploads.
-- Set secure production secrets for `SESSION_SECRET`.
-- Add rate limiting and anti-abuse checks for auth/apply/chat endpoints.
-- Add monitoring/logging and automated tests for critical flows.
+- Netlify is supported without any extra third-party signup:
+  - In Netlify env vars, set only `SESSION_SECRET` to a long random string.
+  - Keep `DATABASE_URL` unset on Netlify.
+  - On first production request, Shiftly automatically copies `public/seed/shiftly-template.db` to runtime and persists DB changes to Netlify Blobs.
+  - Uploaded CVs/logos/cover letters are stored in Netlify Blobs and served via `/api/uploads/[...slug]`.
+- For higher-scale production later:
+  - Move from SQLite blob-sync to managed Postgres.
+  - Move file storage to dedicated object storage if needed.
+  - Add rate limiting and anti-abuse checks for auth/apply/chat endpoints.
+  - Add monitoring/logging and automated tests for critical flows.

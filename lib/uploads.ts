@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
+import { isNetlifyRuntime, storeFileInNetlifyBlob } from "@/lib/netlify-persistence";
 
 const folderMap: Record<FileType, string> = {
   CV: "cv",
@@ -19,11 +20,16 @@ export async function storeUpload(file: File, ownerId: string, type: FileType) {
   const folder = folderMap[type];
   const relativePath = `/uploads/${folder}/${storedName}`;
   const uploadDir = path.join(process.cwd(), "public", "uploads", folder);
-  await mkdir(uploadDir, { recursive: true });
-  const filePath = path.join(uploadDir, storedName);
+  const arrayBuffer = await file.arrayBuffer();
 
-  const bytes = Buffer.from(await file.arrayBuffer());
-  await writeFile(filePath, bytes);
+  if (isNetlifyRuntime()) {
+    await storeFileInNetlifyBlob(`${folder}/${storedName}`, arrayBuffer);
+  } else {
+    await mkdir(uploadDir, { recursive: true });
+    const filePath = path.join(uploadDir, storedName);
+    const bytes = Buffer.from(arrayBuffer);
+    await writeFile(filePath, bytes);
+  }
 
   return db.uploadedFile.create({
     data: {
@@ -33,7 +39,7 @@ export async function storeUpload(file: File, ownerId: string, type: FileType) {
       storedName,
       mimeType: file.type || "application/octet-stream",
       size: file.size,
-      path: relativePath,
+      path: isNetlifyRuntime() ? `/api/uploads/${folder}/${storedName}` : relativePath,
     },
   });
 }
