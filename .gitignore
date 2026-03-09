@@ -54,3 +54,6 @@ next-env.d.ts
 !/public/uploads/logo/.gitkeep
 !/public/uploads/cover/.gitkeep
 !/public/uploads/profile/.gitkeep
+
+# Local Netlify folder
+.netlify
